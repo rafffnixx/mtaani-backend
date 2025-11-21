@@ -7,7 +7,23 @@ const pool = new Pool({
   database: process.env.DB_NAME,
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+  ssl: {
+    require: true,
+    rejectUnauthorized: false
+  },
+  // Add connection timeout and retry settings
+  connectionTimeoutMillis: 10000,
+  idleTimeoutMillis: 30000,
+  max: 20, // maximum number of clients in the pool
+});
+
+// Test connection on startup
+pool.on('connect', () => {
+  console.log('✅ Database connected successfully');
+});
+
+pool.on('error', (err) => {
+  console.error('❌ Database connection error:', err);
 });
 
 module.exports = pool;
