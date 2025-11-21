@@ -1,10 +1,5 @@
 const { Pool } = require('pg');
 
-// Only load .env in development
-if (process.env.NODE_ENV !== 'production') {
-  require('dotenv').config();
-}
-
 const pool = new Pool({
   host: process.env.DB_HOST,
   port: process.env.DB_PORT,
