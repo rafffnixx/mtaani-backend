@@ -4,24 +4,66 @@ exports.getCustomerHome = async (req, res) => {
   try {
     console.log('🏠 Fetching customer home data...');
 
-    // Get categories with product counts
+    // Get only the specific categories we want: New, Refill, Accessories, Empty
     const categoriesQuery = `
       SELECT 
         c.*,
         COUNT(p.id) as product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
-      GROUP BY c.id, c.name
-      ORDER BY c.name ASC
+      WHERE c.slug IN ('gas-refill', 'accessories', 'empty-cylinders')
+         OR (c.slug = 'cylinders' AND c.name = 'New Cylinders')
+      GROUP BY c.id, c.name, c.slug
+      ORDER BY 
+        CASE 
+          WHEN c.slug = 'gas-refill' THEN 1
+          WHEN c.slug = 'cylinders' THEN 2
+          WHEN c.slug = 'empty-cylinders' THEN 3
+          WHEN c.slug = 'accessories' THEN 4
+          ELSE 5
+        END
     `;
     
     console.log('📊 Executing categories query...');
     const categoriesResult = await pool.query(categoriesQuery);
-    console.log('✅ Categories fetched:', categoriesResult.rows.length);
+    
+    // Transform the categories to show proper names
+    const transformedCategories = categoriesResult.rows.map(cat => {
+      let displayName = cat.name;
+      let displaySlug = cat.slug;
+      
+      // Rename "Cylinders" to "New Cylinders" for clarity
+      if (cat.slug === 'cylinders') {
+        displayName = 'New Cylinders';
+        displaySlug = 'new-cylinders';
+      }
+      // Rename "Gas Refill" to just "Refill"
+      else if (cat.slug === 'gas-refill') {
+        displayName = 'Refill';
+        displaySlug = 'refill';
+      }
+      // Rename "Empty Cylinders" to just "Empty"
+      else if (cat.slug === 'empty-cylinders') {
+        displayName = 'Empty';
+        displaySlug = 'empty';
+      }
+      
+      return {
+        ...cat,
+        display_name: displayName,
+        display_slug: displaySlug,
+        product_count: parseInt(cat.product_count) || 0
+      };
+    });
+
+    console.log('✅ Categories fetched:', transformedCategories.map(c => ({ 
+      name: c.display_name, 
+      count: c.product_count 
+    })));
 
     // Get featured products
     const featuredQuery = `
-      SELECT p.*, c.name as category_name 
+      SELECT p.*, c.name as category_name, c.slug as category_slug 
       FROM products p 
       LEFT JOIN categories c ON p.category_id = c.id
       WHERE p.category_id IS NOT NULL 
@@ -29,59 +71,25 @@ exports.getCustomerHome = async (req, res) => {
       LIMIT 10
     `;
     
-    console.log('📊 Executing featured products query...');
     const featuredResult = await pool.query(featuredQuery);
-    console.log('✅ Featured products fetched:', featuredResult.rows.length);
 
-    // Get banners
-    const bannersQuery = 'SELECT * FROM banners';
-    console.log('📊 Executing banners query...');
-    const bannersResult = await pool.query(bannersQuery);
-    console.log('✅ Banners fetched:', bannersResult.rows.length);
+    // Get banners, promotions, company info
+    const bannersResult = await pool.query('SELECT * FROM banners');
+    const promotionsResult = await pool.query('SELECT * FROM promotions WHERE valid_until >= CURRENT_DATE');
+    const companyResult = await pool.query('SELECT * FROM company_info LIMIT 1');
 
-    // Get promotions
-    const promotionsQuery = `
-      SELECT * FROM promotions 
-      WHERE valid_until >= CURRENT_DATE
-    `;
-    console.log('📊 Executing promotions query...');
-    const promotionsResult = await pool.query(promotionsQuery);
-    console.log('✅ Promotions fetched:', promotionsResult.rows.length);
-
-    // Get company info
-    const companyQuery = 'SELECT * FROM company_info LIMIT 1';
-    console.log('📊 Executing company info query...');
-    const companyResult = await pool.query(companyQuery);
-    console.log('✅ Company info fetched:', companyResult.rows.length);
-
-    // Prepare response data
     const responseData = {
-      categories: categoriesResult.rows.map(cat => ({
-        ...cat,
-        product_count: parseInt(cat.product_count) || 0
-      })),
+      categories: transformedCategories,
       featuredProducts: featuredResult.rows,
       banners: bannersResult.rows,
       promotions: promotionsResult.rows,
       company: companyResult.rows[0] || {},
     };
 
-    console.log('📦 Final response data:', {
-      categories: responseData.categories.map(c => ({ 
-        name: c.name, 
-        count: c.product_count,
-        id: c.id 
-      })),
-      featuredProducts: responseData.featuredProducts.length,
-      banners: responseData.banners.length,
-      promotions: responseData.promotions.length
-    });
-
     res.json(responseData);
 
   } catch (err) {
     console.error('❌ Home fetch error:', err.message);
-    console.error('❌ Error stack:', err.stack);
     res.status(500).json({ error: 'Failed to load homepage content: ' + err.message });
   }
 };
@@ -99,13 +107,26 @@ exports.getCustomerProducts = async (req, res) => {
   `;
   const params = [];
 
+  // Map frontend slugs to database slugs
   if (category) {
+    let dbSlug = category;
+    
+    // Map frontend category names to database slugs
+    if (category === 'new-cylinders') {
+      dbSlug = 'cylinders'; // Your cylinders category in DB
+    } else if (category === 'refill') {
+      dbSlug = 'gas-refill'; // Your gas-refill category in DB
+    } else if (category === 'empty') {
+      dbSlug = 'empty-cylinders'; // Your empty-cylinders category in DB
+    }
+    // accessories stays the same
+    
     query += ` AND c.slug = $${params.length + 1}`;
-    params.push(category);
+    params.push(dbSlug);
   }
 
   if (search) {
-    query += ` AND p.name ILIKE $${params.length + 1}`;
+    query += ` AND (p.name ILIKE $${params.length + 1} OR p.description ILIKE $${params.length + 1})`;
     params.push(`%${search}%`);
   }
 
@@ -113,7 +134,7 @@ exports.getCustomerProducts = async (req, res) => {
 
   try {
     const result = await pool.query(query, params);
-    console.log(`✅ Products fetched: ${result.rows.length} products`);
+    console.log(`✅ Products fetched: ${result.rows.length} products for category: ${category}`);
     res.json(result.rows);
   } catch (err) {
     console.error('❌ Product fetch error:', err.message);
@@ -121,6 +142,7 @@ exports.getCustomerProducts = async (req, res) => {
   }
 };
 
+// Keep your emergency functions the same...
 exports.postEmergencyRequest = async (req, res) => {
   const { user_id, type, description } = req.body;
   try {
