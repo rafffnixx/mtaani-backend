@@ -1,5 +1,5 @@
 // backend/src/controllers/agentController.js
-const pool = require('../../config/db');
+const pool = require('../../config/dbb');
 
 // GET /api/agent/profile - Get agent profile (for agents with role='dealer')
 const getAgentProfile = async (req, res) => {

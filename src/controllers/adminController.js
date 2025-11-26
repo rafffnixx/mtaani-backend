@@ -1,4 +1,4 @@
-const pool = require('../../config/db');
+const pool = require('../../config/dbb');
 
 // Assign order to dealer
 const assignOrderToCandidates = async (req, res) => {

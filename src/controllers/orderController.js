@@ -1,4 +1,4 @@
-const pool = require('../../config/db');
+const pool = require('../../config/dbb');
 
 const createOrderFromCart = async (req, res) => {
   const userId = req.user.id;
