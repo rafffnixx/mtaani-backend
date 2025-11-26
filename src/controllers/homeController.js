@@ -1,52 +1,42 @@
-const pool = require('../../config/db');
+const pool = require('../../config/dbb');
 
 exports.getCustomerHome = async (req, res) => {
   try {
     console.log('🏠 Fetching customer home data...');
 
-    // Get only the specific categories we want: New, Refill, Accessories, Empty
+    // Get ALL categories from database
     const categoriesQuery = `
       SELECT 
         c.*,
         COUNT(p.id) as product_count
       FROM categories c
       LEFT JOIN products p ON c.id = p.category_id
-      WHERE c.slug IN ('gas-refill', 'accessories', 'empty-cylinders')
-         OR (c.slug = 'cylinders' AND c.name = 'New Cylinders')
       GROUP BY c.id, c.name, c.slug
-      ORDER BY 
-        CASE 
-          WHEN c.slug = 'gas-refill' THEN 1
-          WHEN c.slug = 'cylinders' THEN 2
-          WHEN c.slug = 'empty-cylinders' THEN 3
-          WHEN c.slug = 'accessories' THEN 4
-          ELSE 5
-        END
+      ORDER BY c.id
     `;
     
     console.log('📊 Executing categories query...');
     const categoriesResult = await pool.query(categoriesQuery);
     
-    // Transform the categories to show proper names
+    // Transform the categories to map database slugs to frontend slugs
     const transformedCategories = categoriesResult.rows.map(cat => {
       let displayName = cat.name;
       let displaySlug = cat.slug;
       
-      // Rename "Cylinders" to "New Cylinders" for clarity
-      if (cat.slug === 'cylinders') {
+      // Map database slugs to frontend slugs
+      if (cat.slug === 'gas') {
+        displayName = 'Gas Refill';
+        displaySlug = 'refill'; // Frontend expects 'refill'
+      }
+      else if (cat.slug === 'cylinders') {
         displayName = 'New Cylinders';
-        displaySlug = 'new-cylinders';
+        displaySlug = 'new-cylinders'; // Frontend expects 'new-cylinders'
       }
-      // Rename "Gas Refill" to just "Refill"
-      else if (cat.slug === 'gas-refill') {
-        displayName = 'Refill';
-        displaySlug = 'refill';
-      }
-      // Rename "Empty Cylinders" to just "Empty"
       else if (cat.slug === 'empty-cylinders') {
-        displayName = 'Empty';
-        displaySlug = 'empty';
+        displayName = 'Empty Cylinders';
+        displaySlug = 'empty'; // Frontend expects 'empty'
       }
+      // accessories and emergency stay the same
       
       return {
         ...cat,
@@ -58,6 +48,7 @@ exports.getCustomerHome = async (req, res) => {
 
     console.log('✅ Categories fetched:', transformedCategories.map(c => ({ 
       name: c.display_name, 
+      slug: c.display_slug,
       count: c.product_count 
     })));
 
@@ -115,11 +106,13 @@ exports.getCustomerProducts = async (req, res) => {
     if (category === 'new-cylinders') {
       dbSlug = 'cylinders'; // Your cylinders category in DB
     } else if (category === 'refill') {
-      dbSlug = 'gas-refill'; // Your gas-refill category in DB
+      dbSlug = 'gas'; // Your gas category in DB
     } else if (category === 'empty') {
       dbSlug = 'empty-cylinders'; // Your empty-cylinders category in DB
     }
-    // accessories stays the same
+    // accessories and emergency stay the same
+    
+    console.log(`🔀 Mapping frontend category: ${category} → database slug: ${dbSlug}`);
     
     query += ` AND c.slug = $${params.length + 1}`;
     params.push(dbSlug);
