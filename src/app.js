@@ -12,7 +12,7 @@ console.log('🔍 Environment Variables:', {
 
 const express = require('express');
 const cors = require('cors');
-const pool = require('../config/dbb'); // Keep using dbb for now
+const pool = require('../config/db'); // Keep using dbb for now
 
 // COMPREHENSIVE DEBUG LOGGING
 
