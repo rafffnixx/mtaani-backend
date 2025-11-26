@@ -112,8 +112,8 @@ app.get('/', (req, res) => {
   });
 });
 
-// 404 handler
-app.use('*', (req, res) => {
+// FIXED: 404 handler - removed the problematic '*' or use proper syntax
+app.use((req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
     path: req.originalUrl,
