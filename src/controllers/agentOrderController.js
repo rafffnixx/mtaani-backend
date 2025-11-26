@@ -1,5 +1,5 @@
 // backend/src/controllers/agentOrderController.js
-const pool = require('../../config/dbb');
+const pool = require('../../config/db');
 
 // POST /api/agent-orders/:orderId/accept - Accept an available order
 const acceptOrder = async (req, res) => {

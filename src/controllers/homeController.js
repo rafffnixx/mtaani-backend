@@ -1,4 +1,4 @@
-const pool = require('../../config/dbb');
+const pool = require('../../config/db');
 
 exports.getCustomerHome = async (req, res) => {
   try {

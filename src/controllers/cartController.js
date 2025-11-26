@@ -1,4 +1,4 @@
-const pool = require('../../config/dbb');
+const pool = require('../../config/db');
 
 const addToCart = async (req, res) => {
   const { product_id, quantity = 1 } = req.body;

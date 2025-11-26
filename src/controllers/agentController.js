@@ -1,5 +1,5 @@
 // backend/src/controllers/agentController.js
-const pool = require('../../config/dbb');
+const pool = require('../../config/db');
 
 // GET /api/agent/profile - Get agent profile (for agents with role='dealer')
 const getAgentProfile = async (req, res) => {
@@ -20,7 +20,7 @@ const getAgentProfile = async (req, res) => {
         COALESCE(SUM(CASE WHEN o.status = 'delivered' AND DATE(o.updated_at) = CURRENT_DATE THEN o.total_amount * 0.1 ELSE 0 END), 0) as earnings_today
       FROM users u
       LEFT JOIN orders o ON u.id = o.agent_id
-      WHERE u.id = $1 AND u.role = 'dealer'  // 🚨 CHANGED: 'agent' to 'dealer'
+      WHERE u.id = $1 AND u.role = 'dealer'
       GROUP BY u.id, u.name, u.phone, u.role, u.location, u.created_at`,
       [userId]
     );
@@ -101,7 +101,7 @@ const getAgentDashboard = async (req, res) => {
           COALESCE(SUM(CASE WHEN o.status = 'delivered' AND DATE(o.updated_at) = CURRENT_DATE THEN o.total_amount * 0.1 ELSE 0 END), 0) as earnings_today
         FROM users u
         LEFT JOIN orders o ON u.id = o.agent_id
-        WHERE u.id = $1 AND u.role = 'dealer'  // 🚨 CHANGED: 'agent' to 'dealer'
+        WHERE u.id = $1 AND u.role = 'dealer'
         GROUP BY u.id, u.name`,
         [userId]
       ),
@@ -151,7 +151,7 @@ const getAgentDashboard = async (req, res) => {
 
     // Parse customer locations for available orders
     const parsedAvailableOrders = availableOrders.map(order => {
-    let customerLocation = order.customer_location; // Use string directly
+      let customerLocation = order.customer_location;
       
       return {
         ...order,
@@ -161,7 +161,7 @@ const getAgentDashboard = async (req, res) => {
 
     // Parse customer locations for my orders
     const parsedMyOrders = myOrders.map(order => {
-      let customerLocation = order.customer_location; // Use string directly
+      let customerLocation = order.customer_location;
       return {
         ...order,
         customer_location: customerLocation
@@ -300,7 +300,7 @@ const updateAgentProfile = async (req, res) => {
     const query = `
       UPDATE users 
       SET ${updateFields.join(', ')}, updated_at = CURRENT_TIMESTAMP 
-      WHERE id = $${paramCount} AND role = 'dealer'  // 🚨 CHANGED: 'agent' to 'dealer'
+      WHERE id = $${paramCount} AND role = 'dealer'
       RETURNING id, name, phone, role, location, created_at
     `;
 

@@ -1,4 +1,4 @@
-const pool = require('../../config/dbb');
+const pool = require('../../config/db');
 
 // Get user's payment methods
 const getPaymentMethods = async (req, res) => {
