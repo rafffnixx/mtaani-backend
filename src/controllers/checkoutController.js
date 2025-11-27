@@ -32,7 +32,7 @@ class CheckoutController {
 
       // Get order items
       const itemsQuery = `
-        SELECT oi.*, p.name as product_name, p.price
+        SELECT oi.*, p.name as product_name, p.price, p.image_url
         FROM order_items oi
         LEFT JOIN products p ON oi.product_id = p.id
         WHERE oi.order_id = $1
@@ -182,9 +182,9 @@ class CheckoutController {
         UPDATE orders 
         SET payment_method = $1, 
             status = $2,
-            updated_at = $3
-        WHERE id = $4
-      `, [payment_method, paymentStatus === 'paid' ? 'confirmed' : 'pending_payment', new Date(), orderId]);
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = $3
+      `, [payment_method, paymentStatus === 'paid' ? 'confirmed' : 'pending_payment', orderId]);
 
       // Create payment record
       const paymentInsertQuery = `
@@ -192,9 +192,10 @@ class CheckoutController {
           order_id, user_id, payment_method, amount, 
           transaction_id, mpesa_code, status, paid_at
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        RETURNING *
       `;
       
-      await pool.query(paymentInsertQuery, [
+      const paymentRecord = await pool.query(paymentInsertQuery, [
         orderId, 
         userId, 
         payment_method, 
@@ -211,6 +212,7 @@ class CheckoutController {
         success: true,
         message: paymentResult.message,
         payment: {
+          id: paymentRecord.rows[0].id,
           method: payment_method,
           status: paymentStatus,
           transaction_id: transactionId,
