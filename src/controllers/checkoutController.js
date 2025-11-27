@@ -1,4 +1,4 @@
-const pool = require('../../config/db');
+const pool = require('../config/db');
 
 class CheckoutController {
   
@@ -271,7 +271,7 @@ class CheckoutController {
     }
   }
 
-  // Updated M-Pesa payment processing
+  // M-Pesa payment processing
   async processMpesaPayment(order, phoneNumber) {
     try {
       console.log(`📱 Processing M-Pesa payment for order: ${order.id}, phone: ${phoneNumber}`);
@@ -321,7 +321,7 @@ class CheckoutController {
     }
   }
 
-  // Card payment processing (same as before)
+  // Card payment processing
   async processCardPayment(order, cardDetails) {
     try {
       console.log(`💳 Processing card payment for order: ${order.id}`);
