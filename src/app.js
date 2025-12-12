@@ -12,11 +12,11 @@ console.log('🔍 Environment Variables:', {
 
 const express = require('express');
 const cors = require('cors');
-const pool = require('../config/db'); // Fixed: using db instead of dbb
 
 // COMPREHENSIVE DEBUG LOGGING
 console.log('🚀 Starting Mtaani Gas Backend Server...');
 
+// Import routes with correct paths
 const agentRoutes = require('./routes/agentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const agentOrdersRoutes = require('./routes/agentOrdersRoutes');
@@ -34,6 +34,7 @@ const app = express();
 app.use(cors({
   origin: [
     'http://localhost:3000',
+    'http://localhost:3001',
     'http://localhost:8081',
     'https://your-frontend-domain.com' // Add your production frontend URL
   ],
@@ -73,9 +74,10 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Database test endpoint
+// Database test endpoint (moved after pool import)
 app.get('/api/test-db', async (req, res) => {
   try {
+    const pool = require('../config/db');
     console.log('🧪 Testing database connection...');
     const result = await pool.query('SELECT NOW() as current_time, version() as postgres_version');
     console.log('✅ Database connection successful');
@@ -114,7 +116,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// FIXED: 404 handler - removed the problematic '*' or use proper syntax
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ 
     error: 'Route not found',
@@ -139,3 +141,5 @@ app.listen(PORT, () => {
   console.log(`🔗 Health check: http://localhost:${PORT}/api/health`);
   console.log(`🗄️  Database test: http://localhost:${PORT}/api/test-db`);
 });
+
+module.exports = app;

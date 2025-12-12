@@ -48,11 +48,10 @@ const createOrderFromCart = async (req, res) => {
       return total + (parseFloat(item.price) * item.quantity);
     }, 0);
 
-    // 3. FIXED: Use DELIVERY location for dealer matching (NOT customer's registered location)
+    // 3. Extract location for dealer matching
     let customerWard = delivery_location;
     let customerArea = '';
 
-    // Extract just the ward name if it's a full address
     if (delivery_location.includes(',')) {
       customerWard = delivery_location.split(',')[0].trim();
     }
@@ -63,30 +62,33 @@ const createOrderFromCart = async (req, res) => {
       customerArea
     });
 
-    // 4. Create order - FIXED: Use delivery location for customer_location too
+    // 4. SIMPLIFIED INSERT - Only include essential columns, let defaults handle the rest
     const orderRes = await client.query(
       `INSERT INTO orders (
         user_id, 
         delivery_location, 
         customer_location, 
-        status, 
         total_amount, 
-        payment_method, 
-        available_to_agents,
-        assignment_status
-      ) VALUES ($1, $2, $3, 'pending', $4, $5, true, 'available') 
-      RETURNING id, created_at`,
+        payment_method
+        -- Note: We're NOT including: status, payment_status, assignment_status, available_to_agents
+        -- because they have DEFAULT values that will be used automatically
+      ) VALUES ($1, $2, $3, $4, $5) 
+      RETURNING id, created_at, status, payment_status, assignment_status, available_to_agents`,
       [
         userId, 
         delivery_location, 
-        delivery_location,  // Use delivery location here too
+        delivery_location,  // customer_location
         totalAmount, 
         payment_method
+        // Status will default to 'pending'
+        // Payment_status will default to 'pending' 
+        // Assignment_status will default to 'unassigned'
+        // Available_to_agents will default to false
       ]
     );
 
     const orderId = orderRes.rows[0].id;
-    console.log('✅ Created order ID:', orderId);
+    console.log('✅ Created order ID:', orderId, 'Default status:', orderRes.rows[0].status);
 
     // 5. Move items to order_items and update stock
     for (const item of cartRes.rows) {
@@ -104,7 +106,7 @@ const createOrderFromCart = async (req, res) => {
       await client.query('DELETE FROM cart WHERE id = $1', [item.cart_id]);
     }
 
-    // 6. 🎯 FIND DEALERS IN SAME WARD - FIXED QUERY
+    // 6. Find dealers in same ward
     console.log('🔍 Looking for DEALERS in ward:', customerWard);
     
     const dealersInWard = await client.query(
@@ -112,14 +114,14 @@ const createOrderFromCart = async (req, res) => {
        FROM users 
        WHERE role = 'dealer'
        AND location IS NOT NULL
-       AND (location::text ILIKE $1)`,  // Simple text matching only
+       AND (location::text ILIKE $1)`,
       [`%${customerWard}%`]
     );
 
     console.log(`📍 Found ${dealersInWard.rows.length} DEALERS in ward "${customerWard}":`, 
       dealersInWard.rows.map(d => ({ id: d.id, name: d.name })));
 
-    // 7. Create dealer candidates for the order - FIXED: Removed location_match_score
+    // 7. Create dealer candidates for the order
     for (const dealer of dealersInWard.rows) {
       await client.query(
         `INSERT INTO order_dealer_candidates (order_id, dealer_id, status)
@@ -129,10 +131,12 @@ const createOrderFromCart = async (req, res) => {
       );
     }
 
-    // 8. Set assignment expiry
+    // 8. Update order to make it available to agents
     await client.query(
       `UPDATE orders 
-       SET assignment_expiry = NOW() + INTERVAL '24 hours'
+       SET available_to_agents = true,
+           assignment_status = 'available',
+           assignment_expiry = NOW() + INTERVAL '24 hours'
        WHERE id = $1`,
       [orderId]
     );
@@ -144,6 +148,8 @@ const createOrderFromCart = async (req, res) => {
       message: 'Order placed successfully', 
       order_id: orderId,
       total_amount: totalAmount,
+      payment_status: orderRes.rows[0].payment_status,  // Get from created order
+      status: orderRes.rows[0].status,
       dealers_available: dealersInWard.rows.length,
       customer_ward: customerWard,
       available_dealers: dealersInWard.rows.map(d => ({ id: d.id, name: d.name }))
@@ -152,9 +158,17 @@ const createOrderFromCart = async (req, res) => {
   } catch (err) {
     await client.query('ROLLBACK');
     console.error('❌ Order creation error:', err);
+    console.error('Error details:', {
+      message: err.message,
+      code: err.code,
+      detail: err.detail,
+      hint: err.hint
+    });
+    
     res.status(500).json({ 
       success: false,
-      error: 'Failed to create order: ' + err.message 
+      error: 'Failed to create order: ' + err.message,
+      detail: err.detail || 'No additional details'
     });
   } finally {
     client.release();
@@ -163,16 +177,17 @@ const createOrderFromCart = async (req, res) => {
 
 const getCustomerOrders = async (req, res) => {
   const userId = req.user.id;
-  const { status } = req.query;
+  const { status, payment_status } = req.query;
 
   try {
-    console.log('Getting orders for user:', userId, 'Status:', status);
+    console.log('Getting orders for user:', userId, 'Status:', status, 'Payment Status:', payment_status);
 
     let query = `
       SELECT 
         o.id,
         o.total_amount,
         o.status,
+        o.payment_status,  -- ADD THIS
         o.delivery_location,
         o.payment_method,
         o.created_at,
@@ -196,10 +211,18 @@ const getCustomerOrders = async (req, res) => {
     `;
 
     const params = [userId];
+    let paramCount = 2;
 
     if (status) {
-      query += ` AND o.status = $2`;
+      query += ` AND o.status = $${paramCount}`;
       params.push(status);
+      paramCount++;
+    }
+
+    if (payment_status) {
+      query += ` AND o.payment_status = $${paramCount}`;
+      params.push(payment_status);
+      paramCount++;
     }
 
     query += ` GROUP BY o.id, a.name, a.phone, a.vehicle_number
